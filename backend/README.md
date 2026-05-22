@@ -1,99 +1,144 @@
-# PaperToObsidian Backend (AI OCR Service)
+# PaperToObsidian Backend
 
-Backend API này đóng vai trò là lõi AI của ứng dụng PaperToObsidian. Hệ thống sử dụng model `nougat-ocr` (của Meta) được bọc qua framework FastAPI để chuyển đổi file PDF bài báo khoa học thành định dạng Markdown.
+Backend này dùng `nougat-ocr` để chuyển PDF bài báo khoa học sang Markdown/MMD, trích metadata cơ bản, rồi có thể lưu thành note `.md` trực tiếp vào Obsidian vault.
 
-## Tính năng cốt lõi (Giai đoạn 1 & 2)
-- Nhận file PDF qua endpoint `/convert` (`multipart/form-data`).
-- Chạy mô hình AI bóc tách nội dung, giữ nguyên cấu trúc toán học (LaTeX) và bảng biểu.
-- Tự động băm nhỏ Markdown (Parsing) thành các Node (Abstract, Introduction, Method...) để hỗ trợ team dọn sẵn cấu trúc JSON.
-- Tự động lưu bản cứng file `.mmd` cực sạch vào thư mục `outputs/` với tên file là tên bài báo.
-- **Auto-cleanup:** Tự động dọn rác (xóa cache ảnh/PDF tạm) sau mỗi lần request để tiết kiệm ổ cứng server.
+## Tính năng hiện có
 
----
+- `GET /health`: kiểm tra trạng thái API, model Nougat và cấu hình Obsidian.
+- `POST /convert`: nhận file PDF, chạy Nougat OCR, trả Markdown + nodes + metadata.
+- Lưu bản `.mmd` vào thư mục `outputs/`.
+- Nếu cấu hình `OBSIDIAN_VAULT_PATH`, tự tạo note Markdown trong Obsidian.
+- Validate PDF, giới hạn dung lượng upload, kiểm tra page range `start/stop`.
+- Tạo note có YAML frontmatter để Obsidian đọc tốt hơn.
 
-## 🛠 Yêu cầu hệ thống
-- Python 3.9 hoặc 3.10+
-- Môi trường ảo (`venv`)
-- Khuyến nghị chạy trên máy có GPU, hoặc CPU (sẽ mất thời gian xử lý lâu hơn).
-
----
-
-## 🚀 Cài đặt & Khởi chạy (Local)
-
-### Bước 1: Khởi tạo môi trường ảo
-Di chuyển vào thư mục backend service và tạo môi trường ảo (Virtual Environment):
+## Cài đặt local
 
 ```powershell
 cd backend\nougat-api-service
-
-# Tạo môi trường ảo (Đợi 15s để hệ thống copy file)
 python -m venv .venv
-
-# Kích hoạt môi trường ảo
 .\.venv\Scripts\Activate.ps1
+pip install -r requirements.txt
+```
 
-Bước 2: Cài đặt thư viện (Đã fix lỗi xung đột)
-ĐẶC BIỆT LƯU Ý: Phải cài đúng các phiên bản dưới đây để tránh lỗi sập server do các bản update mới nhất của thư viện pypdfium2 và transformers không tương thích với mã nguồn Nougat.
+Nếu dùng GPU trên Windows, hãy cài PyTorch đúng bản CUDA trước khi cài/runs Nougat.
 
-PowerShell
-pip install fastapi uvicorn python-multipart nougat-ocr "pypdfium2<5" transformers==4.38.2 albumentations==1.3.1
-Bước 3: Tải Model Nougat
-Chạy lệnh sau để kéo Model AI về máy (chỉ cần làm 1 lần đầu tiên):
+## Tải model Nougat
 
-PowerShell
+```powershell
 nougat --download
-Bước 4: Thiết lập biến môi trường & Bật Server
-Model vừa tải về sẽ nằm ở thư mục .cache trong User Profile của Windows. Hãy set đường dẫn và khởi chạy uvicorn:
+```
 
-PowerShell
-# Set biến môi trường trỏ đến model
+Sau khi tải, set checkpoint. Ví dụ với model small:
+
+```powershell
 $env:NOUGAT_CHECKPOINT="$env:USERPROFILE\.cache\torch\hub\nougat-0.1.0-small"
+```
 
-# Chạy Server
+## Cấu hình Obsidian
+
+Obsidian vault là một thư mục chứa các file Markdown. Để backend lưu note vào vault, set:
+
+```powershell
+copy .env.example .env
+```
+
+Sau đó sửa file `.env`:
+
+```powershell
+OBSIDIAN_VAULT_PATH=D:\Obsidian\MyVault
+```
+
+Tuỳ chọn thư mục con để lưu paper notes và bật tách section thành node riêng:
+
+```powershell
+OBSIDIAN_PAPERS_DIR=Papers
+OBSIDIAN_SPLIT_NODES=true
+```
+
+Nếu không set `OBSIDIAN_VAULT_PATH`, API vẫn chạy OCR và lưu `.mmd` trong `outputs/`, nhưng response sẽ báo `obsidian.saved = false`.
+
+## Chạy server
+
+```powershell
 uvicorn app:app --host 0.0.0.0 --port 8000 --reload
-API sẽ có sẵn tại:
+```
 
-Health check: http://127.0.0.1:8000/health
+Backend sẽ tự đọc file `.env` trong thư mục `backend\nougat-api-service`. Nếu bạn set biến bằng PowerShell trực tiếp, biến đó sẽ được ưu tiên hơn giá trị trong `.env`.
 
-Swagger UI (Docs): http://127.0.0.1:8000/docs
+URL hữu ích:
 
-📖 Cấu trúc API Contract (Dành cho Dev 3 & Dev 4)
-1. GET /health
-Kiểm tra trạng thái server. Trả về HTTP 200 OK nếu hệ thống sẵn sàng.
+- Health check: `http://127.0.0.1:8000/health`
+- Swagger UI: `http://127.0.0.1:8000/docs`
 
-2. POST /convert
-Upload file PDF và nhận về cấu trúc bài báo phân mảnh.
+## Gọi API
 
-Headers: - N/A (FastAPI đã mở CORS cho phép gọi từ mọi Origin).
+Upload toàn bộ PDF:
 
-Body (multipart/form-data):
-
-file: File PDF cần chuyển đổi (Bắt buộc).
-
-start: (Tùy chọn) Số trang bắt đầu cắt (Int).
-
-stop: (Tùy chọn) Số trang kết thúc (Int).
-
-Ví dụ gọi API bằng PowerShell:
-
-PowerShell
+```powershell
 Invoke-RestMethod `
-    -Uri "[http://127.0.0.1:8000/convert](http://127.0.0.1:8000/convert)" `
-    -Method Post `
-    -Form @{ file = Get-Item "D:\papers\Attention_Is_All_You_Need.pdf" }
-JSON Response trả về (Output mong đợi):
+  -Uri "http://127.0.0.1:8000/convert" `
+  -Method Post `
+  -Form @{ file = Get-Item "D:\papers\Attention_Is_All_You_Need.pdf" }
+```
 
-JSON
+Chỉ xử lý trang 1 đến 5:
+
+```powershell
+Invoke-RestMethod `
+  -Uri "http://127.0.0.1:8000/convert?start=1&stop=5" `
+  -Method Post `
+  -Form @{ file = Get-Item "D:\papers\Attention_Is_All_You_Need.pdf" }
+```
+
+Không lưu vào Obsidian trong request đó:
+
+```powershell
+Invoke-RestMethod `
+  -Uri "http://127.0.0.1:8000/convert?save_to_obsidian=false" `
+  -Method Post `
+  -Form @{ file = Get-Item "D:\papers\Attention_Is_All_You_Need.pdf" }
+```
+
+## Response chính
+
+```json
 {
-    "status": "success",
-    "data": {
-        "paper_title": "Attention Is All You Need",
-        "nodes": {
-            "Metadata_Frontmatter": "Ashish Vaswani, Google Brain...",
-            "Abstract": "The dominant sequence transduction models are based on...",
-            "Introduction": "Recurrent neural networks, long short-term memory...",
-            "Conclusion": "In this work, we presented the Transformer..."
-        },
-        "raw_markdown": "# Attention Is All You Need\n\nAshish Vaswani..."
+  "status": "success",
+  "data": {
+    "paper_title": "Attention Is All You Need",
+    "metadata": {
+      "title": "Attention Is All You Need",
+      "authors": ["Ashish Vaswani"],
+      "doi": null,
+      "year": 2017,
+      "abstract": "...",
+      "keywords": null
+    },
+    "nodes": {
+      "Abstract": "...",
+      "Introduction": "..."
+    },
+    "raw_markdown": "# Attention Is All You Need\n...",
+    "files": {
+      "mmd_output": "D:\\...\\outputs\\Attention Is All You Need.mmd",
+      "obsidian_note": "D:\\Obsidian\\MyVault\\Papers\\Attention Is All You Need.md"
+    },
+    "obsidian": {
+      "saved": true,
+      "reason": null,
+      "path": "D:\\Obsidian\\MyVault\\Papers\\Attention Is All You Need.md"
     }
+  }
 }
+```
+
+## Biến môi trường
+
+- `NOUGAT_CHECKPOINT`: đường dẫn model Nougat.
+- `NOUGAT_BATCHSIZE`: batch size khi inference.
+- `NOUGAT_CACHE_DIR`: thư mục cache tạm cho OCR.
+- `PAPERTOOBSIDIAN_OUTPUT_DIR`: thư mục lưu `.mmd`.
+- `OBSIDIAN_VAULT_PATH`: thư mục vault Obsidian.
+- `OBSIDIAN_PAPERS_DIR`: thư mục con trong vault, mặc định `Papers`.
+- `OBSIDIAN_SPLIT_NODES`: tạo note riêng cho từng section, mặc định `true`.
+- `MAX_UPLOAD_MB`: dung lượng PDF tối đa, mặc định `80`.
