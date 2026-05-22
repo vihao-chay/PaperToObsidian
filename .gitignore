@@ -1,15 +1,8 @@
-# Python
+.venv/
 venv/
 __pycache__/
 *.pyc
-
-# Flutter
-.dart_tool/
-build/
-
-# VSCode
-.vscode/
-
-# Temp
-temp/
-output/
+pdfs/
+outputs/
+.cache/
+.env
