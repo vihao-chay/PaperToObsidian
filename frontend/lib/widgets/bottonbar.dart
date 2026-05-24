@@ -4,11 +4,13 @@ class BottomBar extends StatelessWidget {
   const BottomBar({
     super.key,
     required this.progress,
+    required this.statusText,
     required this.isLoading,
     required this.onConvert,
   });
 
   final double progress;
+  final String statusText;
   final bool isLoading;
   final VoidCallback onConvert;
 
@@ -19,40 +21,50 @@ class BottomBar extends StatelessWidget {
       padding: const EdgeInsets.symmetric(horizontal: 24),
       decoration: const BoxDecoration(
         color: Color(0xFF2A2A2A),
-        border: Border(
-          top: BorderSide(
-            color: Color(0xFF404752),
-          ),
-        ),
+        border: Border(top: BorderSide(color: Color(0xFF404752))),
       ),
       child: Row(
         children: [
           // Progress Section
           Expanded(
-            child: Row(
+            child: Column(
+              mainAxisAlignment: MainAxisAlignment.center,
+              crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Expanded(
-                  child: ClipRRect(
-                    borderRadius: BorderRadius.circular(20),
-                    child: LinearProgressIndicator(
-                      value: progress.clamp(0.0, 1.0),
-                      minHeight: 10,
-                      backgroundColor: const Color(0xFF404752),
-                      valueColor: const AlwaysStoppedAnimation(
-                        Color(0xFF0078D4),
-                      ),
-                    ),
-                  ),
-                ),
-
-                const SizedBox(width: 12),
-
                 Text(
-                  "${(progress * 100).clamp(0, 100).toStringAsFixed(0)}%",
+                  statusText,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
                   style: const TextStyle(
                     color: Color(0xFFC0C7D4),
                     fontWeight: FontWeight.w500,
                   ),
+                ),
+                const SizedBox(height: 8),
+                Row(
+                  children: [
+                    Expanded(
+                      child: ClipRRect(
+                        borderRadius: BorderRadius.circular(20),
+                        child: LinearProgressIndicator(
+                          value: progress.clamp(0.0, 1.0),
+                          minHeight: 10,
+                          backgroundColor: const Color(0xFF404752),
+                          valueColor: const AlwaysStoppedAnimation(
+                            Color(0xFF0078D4),
+                          ),
+                        ),
+                      ),
+                    ),
+                    const SizedBox(width: 12),
+                    Text(
+                      "${(progress * 100).clamp(0, 100).toStringAsFixed(0)}%",
+                      style: const TextStyle(
+                        color: Color(0xFFC0C7D4),
+                        fontWeight: FontWeight.w500,
+                      ),
+                    ),
+                  ],
                 ),
               ],
             ),
@@ -80,10 +92,7 @@ class BottomBar extends StatelessWidget {
             style: ElevatedButton.styleFrom(
               backgroundColor: const Color(0xFF0078D4),
               foregroundColor: Colors.white,
-              padding: const EdgeInsets.symmetric(
-                horizontal: 24,
-                vertical: 16,
-              ),
+              padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 16),
               shape: RoundedRectangleBorder(
                 borderRadius: BorderRadius.circular(14),
               ),
