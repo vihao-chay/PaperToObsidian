@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+
 import 'screens/dashbroad_screen.dart';
 
 void main() {
@@ -11,11 +12,19 @@ class MyApp extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return MaterialApp(
+      title: 'PDF to Obsidian Knowledge Nodes',
       debugShowCheckedModeBanner: false,
-      theme: ThemeData.dark().copyWith(
-        scaffoldBackgroundColor: const Color(0xFF131313),
+      theme: ThemeData(
+        useMaterial3: true,
+        brightness: Brightness.dark,
+        colorScheme: const ColorScheme.dark(
+          primary: Color(0xFF72B7FF),
+          secondary: Color(0xFF2FBF71),
+          surface: Color(0xFF171B22),
+        ),
+        scaffoldBackgroundColor: const Color(0xFF0F1115),
       ),
-      home: const DashboardScreen(), // 👈 chuyển toàn bộ UI sang đây
+      home: const DashboardScreen(),
     );
   }
 }

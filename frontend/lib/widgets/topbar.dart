@@ -9,12 +9,8 @@ class TopBar extends StatelessWidget {
       height: 70,
       padding: const EdgeInsets.symmetric(horizontal: 20),
       decoration: BoxDecoration(
-        color: const Color(0xFF131313).withOpacity(0.9),
-        border: const Border(
-          bottom: BorderSide(
-            color: Color(0xFF404752),
-          ),
-        ),
+        color: const Color(0xE6131313),
+        border: const Border(bottom: BorderSide(color: Color(0xFF404752))),
       ),
       child: Row(
         children: [
@@ -31,13 +27,8 @@ class TopBar extends StatelessWidget {
                 decoration: InputDecoration(
                   border: InputBorder.none,
                   hintText: "Search tools or files...",
-                  hintStyle: TextStyle(
-                    color: Color(0xFFC0C7D4),
-                  ),
-                  prefixIcon: Icon(
-                    Icons.search,
-                    color: Color(0xFFC0C7D4),
-                  ),
+                  hintStyle: TextStyle(color: Color(0xFFC0C7D4)),
+                  prefixIcon: Icon(Icons.search, color: Color(0xFFC0C7D4)),
                 ),
               ),
             ),

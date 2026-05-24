@@ -236,9 +236,12 @@ def resolve_output_folder(vault_path: Path, output_folder: Optional[str] = None)
 
     resolved = Path(output_folder).expanduser().resolve()
     try:
-        resolved.relative_to(vault_path)
+        relative = resolved.relative_to(vault_path)
     except ValueError as exc:
         raise HTTPException(status_code=400, detail="output_folder must be inside the selected vault.") from exc
+
+    if relative.parts and relative.parts[0].lower() == ".obsidian":
+        raise HTTPException(status_code=400, detail="output_folder cannot be inside .obsidian.")
 
     return resolved
 
@@ -805,12 +808,13 @@ def health() -> dict[str, Any]:
 async def analyze(
     file: UploadFile = File(...),
     vault_path: str = Form(...),
+    output_folder: Optional[str] = Form(default=None),
     pdf_path: Optional[str] = Form(default=None),
     start: Optional[int] = Query(default=None, ge=1),
     stop: Optional[int] = Query(default=None, ge=1),
 ) -> dict[str, Any]:
     resolved_vault_path = resolve_vault_path(vault_path)
-    output_folder = resolve_output_folder(resolved_vault_path)
+    output_folder = resolve_output_folder(resolved_vault_path, output_folder)
 
     pdfbin = await file.read()
     validate_upload(file, pdfbin)
