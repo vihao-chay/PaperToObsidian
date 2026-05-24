@@ -1,17 +1,19 @@
-# pdf_convert
+# PDF to Obsidian Knowledge Nodes
 
-A new Flutter project.
+Flutter Desktop frontend for selecting a PDF, validating an Obsidian vault, previewing backend analysis, and exporting Markdown nodes.
 
-## Getting Started
+## Run
 
-This project is a starting point for a Flutter application.
+```powershell
+flutter pub get
+flutter run -d windows
+```
 
-A few resources to get you started if this is your first Flutter project:
+The default backend base URL is `http://127.0.0.1:8000` and can be edited inside the app.
 
-- [Learn Flutter](https://docs.flutter.dev/get-started/learn-flutter)
-- [Write your first Flutter app](https://docs.flutter.dev/get-started/codelab)
-- [Flutter learning resources](https://docs.flutter.dev/reference/learning-resources)
+## API Calls
 
-For help getting started with Flutter development, view the
-[online documentation](https://docs.flutter.dev/), which offers tutorials,
-samples, guidance on mobile development, and a full API reference.
+- `POST /analyze`: multipart form with `file`, `pdf_path`, and `vault_path`.
+- `POST /export`: JSON body with `analysis_id` when available, plus `pdf_path`, `vault_path`, and `output_folder`. If no `analysis_id` is returned by analyze, the frontend sends the parsed analysis payload under `analysis`.
+
+The vault is considered valid only when the selected folder contains a `.obsidian` directory.
