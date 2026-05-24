@@ -1,7 +1,119 @@
-# Flutter-related
-**/Flutter/ephemeral/
-**/Pods/
+# =========================
+# Environment / Secrets
+# =========================
+.env
+.env.*
+!.env.example
 
-# Xcode-related
-**/dgph
+# =========================
+# Python / Backend
+# =========================
+.venv/
+venv/
+env/
+ENV/
+__pycache__/
+*.py[cod]
+*$py.class
+
+.cache/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+
+pdfs/
+outputs/
+
+# =========================
+# Flutter / Dart
+# =========================
+**/.dart_tool/
+**/.flutter-plugins
+**/.flutter-plugins-dependencies
+**/.packages
+**/pubspec.lock
+
+# Build output
+**/build/
+**/.pub-cache/
+**/.pub/
+
+# Flutter generated plugin files
+**/generated_plugin_registrant.*
+**/GeneratedPluginRegistrant.*
+**/GeneratedPluginRegistrant.java
+**/GeneratedPluginRegistrant.h
+**/GeneratedPluginRegistrant.m
+**/GeneratedPluginRegistrant.swift
+
+# Flutter generated config files
+**/Generated.xcconfig
+**/Flutter-Generated.xcconfig
+**/flutter_export_environment.sh
+**/flutter_native_integration.env
+**/flutter_native_splash.env
+**/flutter_lldb_helper.py
+**/flutter_lldbinit
+
+# =========================
+# Android
+# =========================
+**/android/local.properties
+**/android/.gradle/
+**/android/app/debug/
+**/android/app/profile/
+**/android/app/release/
+**/android/key.properties
+**/*.jks
+**/*.keystore
+
+# =========================
+# iOS
+# =========================
+**/ios/Flutter/ephemeral/
+**/ios/Flutter/Generated.xcconfig
+**/ios/Flutter/Flutter-Generated.xcconfig
+**/ios/Flutter/flutter_export_environment.sh
+
+**/ios/Pods/
+**/ios/.symlinks/
+**/ios/Runner.xcworkspace/
+**/ios/Runner.xcuserdatad/
+**/ios/Flutter/App.framework
+**/ios/Flutter/Flutter.framework
+
+# =========================
+# macOS
+# =========================
+**/macos/Flutter/ephemeral/
+**/macos/Flutter/GeneratedPluginRegistrant.swift
+**/macos/Pods/
+**/macos/.symlinks/
+**/macos/Runner.xcworkspace/
+**/macos/Runner.xcuserdatad/
+
+# =========================
+# Windows
+# =========================
+**/windows/flutter/ephemeral/
+
+# =========================
+# Xcode
+# =========================
+**/DerivedData/
 **/xcuserdata/
+**/*.xcuserstate
+**/*.xcscmblueprint
+
+# =========================
+# IDE / Editor
+# =========================
+.vscode/
+.idea/
+*.iml
+
+# =========================
+# OS files
+# =========================
+.DS_Store
+Thumbs.db
