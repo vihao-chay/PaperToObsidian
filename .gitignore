@@ -22,7 +22,6 @@ outputs/
 .packages
 .pub/
 .pub-cache/
-.pubspec.lock
 
 # Flutter generated files
 .flutter-plugins
@@ -76,3 +75,6 @@ web/.dart_tool/
 # OS files
 .DS_Store
 Thumbs.db
+
+# Visual Studio
+.vs/
