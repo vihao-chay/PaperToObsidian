@@ -51,9 +51,12 @@ OBSIDIAN_VAULT_PATH=D:\Obsidian\MyVault
 Tuỳ chọn thư mục con để lưu paper notes và bật tách section thành node riêng:
 
 ```powershell
-OBSIDIAN_PAPERS_DIR=Papers
+# Tuỳ chọn: thư mục con trong vault (để trống = export thẳng vào gốc vault)
+# OBSIDIAN_PAPERS_DIR=Papers
 OBSIDIAN_SPLIT_NODES=true
 ```
+
+Mặc định mỗi bài được lưu trong `Vault/<từ đầu tiên của tiêu đề>/` (ví dụ `Vault/BERT/`, `Vault/Array/`), không còn bọc thêm folder `Papers`.
 
 Nếu không set `OBSIDIAN_VAULT_PATH`, API vẫn chạy OCR và lưu `.mmd` trong `outputs/`, nhưng response sẽ báo `obsidian.saved = false`.
 
@@ -139,6 +142,6 @@ Invoke-RestMethod `
 - `NOUGAT_CACHE_DIR`: thư mục cache tạm cho OCR.
 - `PAPERTOOBSIDIAN_OUTPUT_DIR`: thư mục lưu `.mmd`.
 - `OBSIDIAN_VAULT_PATH`: thư mục vault Obsidian.
-- `OBSIDIAN_PAPERS_DIR`: thư mục con trong vault, mặc định `Papers`.
+- `OBSIDIAN_PAPERS_DIR`: thư mục con trong vault; để trống thì export trực tiếp vào gốc vault.
 - `OBSIDIAN_SPLIT_NODES`: tạo note riêng cho từng section, mặc định `true`.
 - `MAX_UPLOAD_MB`: dung lượng PDF tối đa, mặc định `80`.

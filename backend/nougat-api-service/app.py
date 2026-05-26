@@ -50,7 +50,8 @@ OUTPUT_DIR = Path(os.environ.get("PAPERTOOBSIDIAN_OUTPUT_DIR", BASE_DIR / "outpu
 ANALYSIS_DIR = Path(os.environ.get("PAPERTOOBSIDIAN_ANALYSIS_DIR", OUTPUT_DIR / "analyses")).resolve()
 
 OBSIDIAN_VAULT_PATH = os.environ.get("OBSIDIAN_VAULT_PATH")
-OBSIDIAN_PAPERS_DIR = os.environ.get("OBSIDIAN_PAPERS_DIR", "Papers")
+# Empty default: export directly into vault root (no extra "Papers" folder).
+OBSIDIAN_PAPERS_DIR = os.environ.get("OBSIDIAN_PAPERS_DIR", "").strip()
 OBSIDIAN_SPLIT_NODES = os.environ.get("OBSIDIAN_SPLIT_NODES", "true").lower() not in {"0", "false", "no"}
 MAX_UPLOAD_MB = int(os.environ.get("MAX_UPLOAD_MB", "80"))
 MAX_UPLOAD_BYTES = MAX_UPLOAD_MB * 1024 * 1024
@@ -92,6 +93,26 @@ def safe_filename(value: str, fallback: str = "Untitled Paper", max_length: int 
     if not cleaned:
         cleaned = fallback
     return cleaned[:max_length].rstrip()
+
+
+def paper_folder_slug(title: str, max_length: int = 80) -> str:
+    """Folder name for a paper: first word of the title."""
+    cleaned = clean_markdown_heading(title) or "Untitled Paper"
+    words = cleaned.split()
+    if not words:
+        return safe_filename("Untitled", fallback="Untitled", max_length=max_length)
+
+    first_word = words[0].strip(".,;:!?\"'()[]{}")
+    if not first_word:
+        return safe_filename("Untitled", fallback="Untitled", max_length=max_length)
+
+    return safe_filename(first_word, fallback="Untitled", max_length=max_length)
+
+
+def resolve_paper_dir(target_dir: Path, title: str) -> Path:
+    paper_dir = next_available_path(target_dir / paper_folder_slug(title))
+    paper_dir.mkdir(parents=True, exist_ok=True)
+    return paper_dir
 
 
 def next_available_path(path: Path) -> Path:
@@ -232,7 +253,7 @@ def resolve_vault_path(vault_path: str) -> Path:
 
 def resolve_output_folder(vault_path: Path, output_folder: Optional[str] = None) -> Path:
     if not output_folder:
-        return vault_path / OBSIDIAN_PAPERS_DIR
+        return vault_path / OBSIDIAN_PAPERS_DIR if OBSIDIAN_PAPERS_DIR else vault_path
 
     resolved = Path(output_folder).expanduser().resolve()
     try:
@@ -314,18 +335,18 @@ def build_nodes_preview(
 ) -> list[dict[str, str]]:
     paper_title = metadata.get("title") or "Untitled Paper"
     note_title = safe_filename(paper_title)
+    paper_dir = target_dir / paper_folder_slug(paper_title)
     planned_nodes = [
         {
             "title": paper_title,
             "type": "paper",
-            "path": str(target_dir / f"{note_title}.md"),
+            "path": str(paper_dir / f"{note_title}.md"),
         }
     ]
 
     if not OBSIDIAN_SPLIT_NODES:
         return planned_nodes
 
-    section_dir = target_dir / note_title
     for section_name, section_content in nodes.items():
         if not section_content.strip():
             continue
@@ -335,7 +356,7 @@ def build_nodes_preview(
             {
                 "title": section_name,
                 "type": "section",
-                "path": str(section_dir / f"{safe_filename(section_name, fallback='Section')}.md"),
+                "path": str(paper_dir / f"{safe_filename(section_name, fallback='Section')}.md"),
             }
         )
 
@@ -542,7 +563,7 @@ def build_section_note(
 
 def save_section_notes(
     vault_path: Path,
-    target_dir: Path,
+    paper_dir: Path,
     main_note_path: Path,
     nodes: dict[str, str],
     metadata: dict[str, Any],
@@ -551,10 +572,9 @@ def save_section_notes(
     if not OBSIDIAN_SPLIT_NODES:
         return []
 
-    paper_title = safe_filename(metadata.get("title") or "Untitled Paper")
-    normalized_paper_title = clean_markdown_heading(metadata.get("title") or "").lower()
-    section_dir = target_dir / paper_title
-    section_dir.mkdir(parents=True, exist_ok=True)
+    paper_title = metadata.get("title") or "Untitled Paper"
+    normalized_paper_title = clean_markdown_heading(paper_title).lower()
+    paper_dir.mkdir(parents=True, exist_ok=True)
     parent_link = obsidian_link(vault_path, main_note_path, metadata.get("title") or paper_title)
     section_notes: list[dict[str, str]] = []
 
@@ -566,7 +586,7 @@ def save_section_notes(
         if not section_content.strip():
             continue
 
-        section_path = next_available_path(section_dir / f"{safe_filename(section_name, fallback='Section')}.md")
+        section_path = next_available_path(paper_dir / f"{safe_filename(section_name, fallback='Section')}.md")
         section_path.write_text(
             build_section_note(section_name, section_content, metadata, source_filename, parent_link),
             encoding="utf-8",
@@ -602,13 +622,15 @@ def save_obsidian_note(
             detail=f"OBSIDIAN_VAULT_PATH does not exist or is not a directory: {vault_path}",
         )
 
-    target_dir = vault_path / OBSIDIAN_PAPERS_DIR
+    target_dir = vault_path / OBSIDIAN_PAPERS_DIR if OBSIDIAN_PAPERS_DIR else vault_path
     target_dir.mkdir(parents=True, exist_ok=True)
 
-    note_title = safe_filename(metadata.get("title") or "Untitled Paper")
-    note_path = next_available_path(target_dir / f"{note_title}.md")
+    paper_title = metadata.get("title") or "Untitled Paper"
+    note_title = safe_filename(paper_title)
+    paper_dir = resolve_paper_dir(target_dir, paper_title)
+    note_path = next_available_path(paper_dir / f"{note_title}.md")
 
-    section_notes = save_section_notes(vault_path, target_dir, note_path, nodes, metadata, source_filename)
+    section_notes = save_section_notes(vault_path, paper_dir, note_path, nodes, metadata, source_filename)
     section_links = [(item["title"], item["link"]) for item in section_notes]
     note_path.write_text(
         build_obsidian_note(markdown_text, metadata, source_filename, section_links),
@@ -632,13 +654,15 @@ def save_obsidian_note_to_vault(
     vault_path: Path,
     target_dir: Optional[Path] = None,
 ) -> dict[str, Any]:
-    target_dir = target_dir or vault_path / OBSIDIAN_PAPERS_DIR
+    target_dir = target_dir or (vault_path / OBSIDIAN_PAPERS_DIR if OBSIDIAN_PAPERS_DIR else vault_path)
     target_dir.mkdir(parents=True, exist_ok=True)
 
-    note_title = safe_filename(metadata.get("title") or "Untitled Paper")
-    note_path = next_available_path(target_dir / f"{note_title}.md")
+    paper_title = metadata.get("title") or "Untitled Paper"
+    note_title = safe_filename(paper_title)
+    paper_dir = resolve_paper_dir(target_dir, paper_title)
+    note_path = next_available_path(paper_dir / f"{note_title}.md")
 
-    section_notes = save_section_notes(vault_path, target_dir, note_path, nodes, metadata, source_filename)
+    section_notes = save_section_notes(vault_path, paper_dir, note_path, nodes, metadata, source_filename)
     section_links = [(item["title"], item["link"]) for item in section_notes]
     note_path.write_text(
         build_obsidian_note(markdown_text, metadata, source_filename, section_links),

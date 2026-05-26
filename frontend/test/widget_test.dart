@@ -18,8 +18,11 @@ void main() {
     expect(find.text('Chọn số trang'), findsOneWidget);
     expect(find.text('Trang bắt đầu'), findsOneWidget);
     expect(find.text('Trang kết thúc'), findsOneWidget);
-    expect(find.text('Analyze'), findsOneWidget);
-    expect(find.text('PDF -> Vault -> Analyze -> Export'), findsOneWidget);
+    expect(find.text('Analyze'), findsWidgets);
+    expect(find.text('PDF'), findsWidgets);
+    expect(find.text('Trang'), findsOneWidget);
+    expect(find.text('Export'), findsWidgets);
+    expect(find.text('Đã khóa'), findsOneWidget);
     expect(find.text('Select Folder'), findsNothing);
     expect(find.text('Save Folder'), findsNothing);
   });

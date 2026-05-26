@@ -4,8 +4,10 @@ import 'dart:io';
 import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:google_fonts/google_fonts.dart';
 
 import '../api_service.dart';
+import '../theme/app_theme.dart';
 
 class DashboardScreen extends StatefulWidget {
   const DashboardScreen({super.key});
@@ -32,9 +34,43 @@ class _DashboardScreenState extends State<DashboardScreen> {
   Timer? progressTimer;
 
   bool get canSelectVault => selectedPdf != null && !isBusy;
+  bool get canEditPageRange => vaultValid && !isBusy;
   bool get canAnalyze => selectedPdf != null && vaultValid && !isBusy;
   bool get canExport =>
       analysisData != null && selectedPdf != null && vaultValid && !isBusy;
+
+  /// 0=PDF, 1=Vault, 2=Trang, 3=Analyze, 4=Export
+  int get activeWorkflowStep {
+    if (selectedPdf == null) {
+      return 0;
+    }
+    if (!vaultValid) {
+      return 1;
+    }
+    if (isBusy && analysisData == null) {
+      return 3;
+    }
+    if (analysisData == null) {
+      return 2;
+    }
+    if (!exportSuccess) {
+      return 4;
+    }
+    return 4;
+  }
+
+  _WorkflowStepState workflowStepState(int index) {
+    if (exportSuccess) {
+      return _WorkflowStepState.completed;
+    }
+    if (index < activeWorkflowStep) {
+      return _WorkflowStepState.completed;
+    }
+    if (index == activeWorkflowStep) {
+      return _WorkflowStepState.active;
+    }
+    return _WorkflowStepState.pending;
+  }
 
   @override
   void dispose() {
@@ -96,7 +132,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
           : 'Vault không hợp lệ: thiếu folder .obsidian.';
       progress = 0;
       statusText = isValid
-          ? 'Vault hợp lệ. Bấm Analyze để xem Preview.'
+          ? 'Vault hợp lệ. Chọn số trang (tuỳ chọn) rồi bấm Analyze.'
           : 'Hãy chọn đúng Obsidian Vault.';
       clearAnalysisAndResult();
     });
@@ -120,12 +156,12 @@ class _DashboardScreenState extends State<DashboardScreen> {
       isBusy = true;
       errorText = null;
       progress = 0.06;
-      statusText = 'Đang tải PDF lên backend...';
+      statusText = 'Đang tải PDF lên Hệ thống...';
       clearAnalysisAndResult();
     });
 
     try {
-      startProgressTicker(target: 0.88, label: 'Backend đang phân tích PDF...');
+      startProgressTicker(target: 0.88, label: 'Hệ thống đang phân tích PDF...');
       final response = await ApiService.analyzeFile(
         file: selectedPdf!,
         vaultPath: vaultPath!,
@@ -185,7 +221,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
     });
 
     try {
-      startProgressTicker(target: 0.78, label: 'Backend đang export nodes...');
+      startProgressTicker(target: 0.78, label: 'Hệ thống đang export nodes...');
       final response = await ApiService.exportAnalysis(
         analysisData: data,
         vaultPath: vaultPath!,
@@ -202,7 +238,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
         folderPath = _previewText(exportData['folder_path']);
         filesCreated = files;
         progress = 1;
-        statusText = 'Export thành công. Notes đã ở trong Vault.';
+        statusText = 'Export thành công.';
       });
     } catch (error) {
       progressTimer?.cancel();
@@ -377,24 +413,29 @@ class _DashboardScreenState extends State<DashboardScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: const Color(0xFF0F1115),
-      body: SafeArea(
-        child: Column(
-          children: [
-            _Header(onReset: isBusy ? null : reset),
-            Expanded(
-              child: Center(
-                child: SingleChildScrollView(
-                  padding: const EdgeInsets.symmetric(
-                    horizontal: 24,
-                    vertical: 22,
-                  ),
-                  child: ConstrainedBox(
-                    constraints: const BoxConstraints(maxWidth: 1180),
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.stretch,
-                      children: [
-                        LayoutBuilder(
+      backgroundColor: Colors.transparent,
+      body: AppBackground(
+        child: SafeArea(
+          child: Column(
+            children: [
+              _Header(onReset: isBusy ? null : reset),
+              Expanded(
+                child: Center(
+                  child: SingleChildScrollView(
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 28,
+                      vertical: 26,
+                    ),
+                    child: ConstrainedBox(
+                      constraints: const BoxConstraints(maxWidth: 1180),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.stretch,
+                        children: [
+                          _WorkflowStrip(
+                            stepStateAt: workflowStepState,
+                          ),
+                          const SizedBox(height: 20),
+                          LayoutBuilder(
                           builder: (context, constraints) {
                             final pdfCard = _StepCard(
                               step: '1',
@@ -455,9 +496,17 @@ class _DashboardScreenState extends State<DashboardScreen> {
                         ),
                         const SizedBox(height: 14),
                         _PageRangePanel(
+                          step: '3',
                           startController: startPageController,
                           stopController: stopPageController,
-                          enabled: !isBusy,
+                          enabled: canEditPageRange,
+                          locked: !canEditPageRange,
+                          isActiveStep: activeWorkflowStep == 2,
+                          lockMessage: selectedPdf == null
+                              ? 'Hãy chọn PDF trước.'
+                              : !vaultValid
+                              ? 'Hãy chọn Vault hợp lệ để mở khóa nhập số trang.'
+                              : 'Đang xử lý — tạm khóa nhập trang.',
                           onChanged: pageRangeChanged,
                         ),
                         const SizedBox(height: 14),
@@ -487,15 +536,196 @@ class _DashboardScreenState extends State<DashboardScreen> {
                             onOpenFolder: openFolder,
                           ),
                         ],
-                      ],
+                        ],
+                      ),
                     ),
                   ),
                 ),
               ),
-            ),
-          ],
+            ],
+          ),
         ),
       ),
+    );
+  }
+}
+
+class _WorkflowStrip extends StatelessWidget {
+  const _WorkflowStrip({required this.stepStateAt});
+
+  final _WorkflowStepState Function(int index) stepStateAt;
+
+  static const _steps = ['PDF', 'Vault', 'Trang', 'Analyze', 'Export'];
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 16),
+      decoration: AppDecorations.card(elevated: false),
+      child: Row(
+        children: [
+          for (var i = 0; i < _steps.length; i++) ...[
+            if (i > 0)
+              Expanded(
+                child: AnimatedContainer(
+                  duration: const Duration(milliseconds: 350),
+                  curve: Curves.easeOutCubic,
+                  height: 2,
+                  margin: const EdgeInsets.symmetric(horizontal: 6),
+                  decoration: BoxDecoration(
+                    borderRadius: BorderRadius.circular(2),
+                    gradient: stepStateAt(i - 1) == _WorkflowStepState.completed
+                        ? const LinearGradient(
+                            colors: [AppColors.accentDeep, AppColors.accent],
+                          )
+                        : null,
+                    color: stepStateAt(i - 1) == _WorkflowStepState.completed
+                        ? null
+                        : AppColors.border,
+                  ),
+                ),
+              ),
+            _WorkflowChip(
+              index: i + 1,
+              label: _steps[i],
+              state: stepStateAt(i),
+            ),
+          ],
+        ],
+      ),
+    );
+  }
+}
+
+enum _WorkflowStepState { pending, active, completed }
+
+class _WorkflowChip extends StatefulWidget {
+  const _WorkflowChip({
+    required this.index,
+    required this.label,
+    required this.state,
+  });
+
+  final int index;
+  final String label;
+  final _WorkflowStepState state;
+
+  @override
+  State<_WorkflowChip> createState() => _WorkflowChipState();
+}
+
+class _WorkflowChipState extends State<_WorkflowChip>
+    with SingleTickerProviderStateMixin {
+  late final AnimationController _pulseController;
+  late final Animation<double> _pulse;
+
+  @override
+  void initState() {
+    super.initState();
+    _pulseController = AnimationController(
+      vsync: this,
+      duration: const Duration(milliseconds: 1400),
+    );
+    _pulse = Tween<double>(begin: 1, end: 1.12).animate(
+      CurvedAnimation(parent: _pulseController, curve: Curves.easeInOut),
+    );
+    _syncPulse();
+  }
+
+  @override
+  void didUpdateWidget(covariant _WorkflowChip oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    _syncPulse();
+  }
+
+  void _syncPulse() {
+    if (widget.state == _WorkflowStepState.active) {
+      _pulseController.repeat(reverse: true);
+    } else {
+      _pulseController.stop();
+      _pulseController.value = 0;
+    }
+  }
+
+  @override
+  void dispose() {
+    _pulseController.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final isActive = widget.state == _WorkflowStepState.active;
+    final isCompleted = widget.state == _WorkflowStepState.completed;
+
+    final badge = AnimatedContainer(
+      duration: const Duration(milliseconds: 300),
+      width: 28,
+      height: 28,
+      alignment: Alignment.center,
+      decoration: BoxDecoration(
+        shape: BoxShape.circle,
+        gradient: isActive
+            ? const LinearGradient(
+                colors: [AppColors.primaryDeep, AppColors.primary],
+              )
+            : isCompleted
+            ? const LinearGradient(
+                colors: [AppColors.accentDeep, AppColors.accent],
+              )
+            : null,
+        color: isActive || isCompleted ? null : AppColors.surfaceInset,
+        border: Border.all(
+          color: isActive
+              ? AppColors.primary
+              : isCompleted
+              ? AppColors.accent
+              : AppColors.border,
+          width: isActive ? 2 : 1,
+        ),
+        boxShadow: isActive
+            ? [
+                BoxShadow(
+                  color: AppColors.primary.withAlpha(90),
+                  blurRadius: 14,
+                  spreadRadius: 1,
+                ),
+              ]
+            : null,
+      ),
+      child: isCompleted
+          ? const Icon(Icons.check_rounded, size: 16, color: Color(0xFF07130D))
+          : Text(
+              '${widget.index}',
+              style: GoogleFonts.plusJakartaSans(
+                color: isActive ? Colors.white : AppColors.textMuted,
+                fontSize: 12,
+                fontWeight: FontWeight.w800,
+              ),
+            ),
+    );
+
+    return Row(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        isActive
+            ? ScaleTransition(scale: _pulse, child: badge)
+            : badge,
+        const SizedBox(width: 8),
+        AnimatedDefaultTextStyle(
+          duration: const Duration(milliseconds: 300),
+          style: GoogleFonts.plusJakartaSans(
+            color: isActive
+                ? AppColors.textPrimary
+                : isCompleted
+                ? AppColors.accent
+                : AppColors.textMuted,
+            fontSize: isActive ? 13.5 : 13,
+            fontWeight: isActive ? FontWeight.w800 : FontWeight.w600,
+          ),
+          child: Text(widget.label),
+        ),
+      ],
     );
   }
 }
@@ -508,63 +738,79 @@ class _Header extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Container(
-      height: 72,
-      padding: const EdgeInsets.symmetric(horizontal: 26),
-      decoration: const BoxDecoration(
-        color: Color(0xFF12151B),
-        border: Border(bottom: BorderSide(color: Color(0xFF252B34))),
+      padding: const EdgeInsets.fromLTRB(28, 16, 28, 16),
+      decoration: BoxDecoration(
+        color: AppColors.headerBg.withAlpha(235),
+        border: const Border(bottom: BorderSide(color: AppColors.border)),
+        boxShadow: const [
+          BoxShadow(
+            color: Color(0x33000000),
+            blurRadius: 18,
+            offset: Offset(0, 6),
+          ),
+        ],
       ),
       child: Row(
         children: [
           Container(
-            width: 38,
-            height: 38,
+            width: 44,
+            height: 44,
             decoration: BoxDecoration(
-              color: const Color(0xFF1A73E8).withAlpha(32),
-              borderRadius: BorderRadius.circular(8),
+              gradient: const LinearGradient(
+                begin: Alignment.topLeft,
+                end: Alignment.bottomRight,
+                colors: [AppColors.primaryDeep, AppColors.primary],
+              ),
+              borderRadius: BorderRadius.circular(AppRadii.md),
+              boxShadow: const [
+                BoxShadow(
+                  color: Color(0x404B6FE8),
+                  blurRadius: 16,
+                  offset: Offset(0, 4),
+                ),
+              ],
             ),
             child: const Icon(
-              Icons.account_tree_outlined,
-              color: Color(0xFF72B7FF),
-              size: 21,
+              Icons.hub_outlined,
+              color: Colors.white,
+              size: 22,
             ),
           ),
-          const SizedBox(width: 13),
-          const Expanded(
+          const SizedBox(width: 14),
+          Expanded(
             child: Column(
-              mainAxisAlignment: MainAxisAlignment.center,
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Text(
-                  'PDF to Obsidian Knowledge Nodes',
+                  'PDF TO OBSIDIAN',
                   maxLines: 1,
                   overflow: TextOverflow.ellipsis,
-                  style: TextStyle(
-                    color: Color(0xFFF4F7FB),
-                    fontSize: 18,
+                  style: GoogleFonts.plusJakartaSans(
+                    color: AppColors.textPrimary,
+                    fontSize: 19,
                     fontWeight: FontWeight.w800,
+                    letterSpacing: -0.3,
                   ),
                 ),
-                SizedBox(height: 3),
+                const SizedBox(height: 4),
                 Text(
-                  'PDF -> Vault -> Analyze -> Export',
+                  'Chuyển PDF thành nodes trong Obsidian Vault',
                   maxLines: 1,
                   overflow: TextOverflow.ellipsis,
-                  style: TextStyle(color: Color(0xFF9AA6B5), fontSize: 12),
+                  style: GoogleFonts.plusJakartaSans(
+                    color: AppColors.textSecondary,
+                    fontSize: 12.5,
+                  ),
                 ),
               ],
             ),
           ),
           OutlinedButton.icon(
             onPressed: onReset,
-            icon: const Icon(Icons.refresh, size: 17),
-            label: const Text('Làm mới'),
-            style: OutlinedButton.styleFrom(
-              foregroundColor: const Color(0xFFC8D2DE),
-              side: const BorderSide(color: Color(0xFF384251)),
-              shape: RoundedRectangleBorder(
-                borderRadius: BorderRadius.circular(8),
-              ),
+            icon: const Icon(Icons.refresh_rounded, size: 18),
+            label: Text(
+              'Làm mới',
+              style: GoogleFonts.plusJakartaSans(fontWeight: FontWeight.w600),
             ),
           ),
         ],
@@ -603,40 +849,39 @@ class _StepCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final borderColor = valid
-        ? const Color(0xFF2FBF71)
+        ? AppColors.accent
         : active
-        ? const Color(0xFF3D6E9F)
-        : const Color(0xFF29313D);
-    final textColor = active
-        ? const Color(0xFFF4F7FB)
-        : const Color(0xFF7D8896);
+        ? AppColors.primary.withAlpha(160)
+        : AppColors.border;
+    final textColor = active ? AppColors.textPrimary : AppColors.textMuted;
+    final accent = valid
+        ? AppColors.accent
+        : active
+        ? AppColors.primary
+        : AppColors.textMuted;
 
-    return Container(
-      constraints: const BoxConstraints(minHeight: 188),
-      padding: const EdgeInsets.all(18),
-      decoration: BoxDecoration(
-        color: const Color(0xFF171B22),
-        borderRadius: BorderRadius.circular(10),
-        border: Border.all(color: borderColor, width: 1.3),
-      ),
+    return AnimatedContainer(
+      duration: const Duration(milliseconds: 220),
+      curve: Curves.easeOutCubic,
+      constraints: const BoxConstraints(minHeight: 196),
+      padding: const EdgeInsets.all(20),
+      decoration: AppDecorations.card(borderColor: borderColor),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Row(
             children: [
               Container(
-                width: 34,
-                height: 34,
+                width: 36,
+                height: 36,
                 alignment: Alignment.center,
-                decoration: BoxDecoration(
-                  color: const Color(0xFF72B7FF).withAlpha(24),
-                  borderRadius: BorderRadius.circular(8),
-                ),
+                decoration: AppDecorations.iconBadge(accent),
                 child: Text(
                   step,
-                  style: const TextStyle(
-                    color: Color(0xFF72B7FF),
+                  style: GoogleFonts.plusJakartaSans(
+                    color: accent,
                     fontWeight: FontWeight.w800,
+                    fontSize: 14,
                   ),
                 ),
               ),
@@ -647,49 +892,40 @@ class _StepCard extends StatelessWidget {
                   children: [
                     Text(
                       title,
-                      style: TextStyle(
+                      style: GoogleFonts.plusJakartaSans(
                         color: textColor,
                         fontSize: 17,
                         fontWeight: FontWeight.w800,
                       ),
                     ),
-                    const SizedBox(height: 3),
+                    const SizedBox(height: 4),
                     Text(
                       subtitle,
-                      style: const TextStyle(
-                        color: Color(0xFF9AA6B5),
-                        fontSize: 12,
+                      style: GoogleFonts.plusJakartaSans(
+                        color: AppColors.textSecondary,
+                        fontSize: 12.5,
                       ),
                     ),
                   ],
                 ),
               ),
-              Icon(
-                icon,
-                color: active
-                    ? const Color(0xFF72B7FF)
-                    : const Color(0xFF596575),
-              ),
+              Icon(icon, color: accent, size: 22),
             ],
           ),
           const SizedBox(height: 16),
           Container(
-            height: 40,
-            padding: const EdgeInsets.symmetric(horizontal: 12),
+            height: 42,
+            padding: const EdgeInsets.symmetric(horizontal: 14),
             alignment: Alignment.centerLeft,
-            decoration: BoxDecoration(
-              color: const Color(0xFF101319),
-              borderRadius: BorderRadius.circular(8),
-              border: Border.all(color: const Color(0xFF252B34)),
-            ),
+            decoration: AppDecorations.insetField(),
             child: Text(
               path ?? 'Chưa chọn đường dẫn',
               maxLines: 1,
               overflow: TextOverflow.ellipsis,
-              style: TextStyle(
+              style: GoogleFonts.plusJakartaSans(
                 color: path == null
-                    ? const Color(0xFF626E7D)
-                    : const Color(0xFFC8D2DE),
+                    ? AppColors.textMuted
+                    : AppColors.textPrimary,
                 fontSize: 13,
               ),
             ),
@@ -700,24 +936,17 @@ class _StepCard extends StatelessWidget {
               _StatusPill(
                 label: status,
                 color: valid
-                    ? const Color(0xFF2FBF71)
+                    ? AppColors.accent
                     : active
-                    ? const Color(0xFFFFB454)
-                    : const Color(0xFF7D8896),
+                    ? AppColors.warning
+                    : AppColors.textMuted,
               ),
               const Spacer(),
-              FilledButton.icon(
+              GradientActionButton(
+                label: buttonLabel,
+                icon: buttonIcon,
                 onPressed: onPressed,
-                icon: Icon(buttonIcon, size: 17),
-                label: Text(buttonLabel),
-                style: FilledButton.styleFrom(
-                  backgroundColor: const Color(0xFF1A73E8),
-                  foregroundColor: Colors.white,
-                  minimumSize: const Size(126, 39),
-                  shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(8),
-                  ),
-                ),
+                minWidth: 128,
               ),
             ],
           ),
@@ -729,28 +958,45 @@ class _StepCard extends StatelessWidget {
 
 class _PageRangePanel extends StatelessWidget {
   const _PageRangePanel({
+    required this.step,
     required this.startController,
     required this.stopController,
     required this.enabled,
+    required this.locked,
+    required this.isActiveStep,
+    required this.lockMessage,
     required this.onChanged,
   });
 
+  final String step;
   final TextEditingController startController;
   final TextEditingController stopController;
   final bool enabled;
+  final bool locked;
+  final bool isActiveStep;
+  final String lockMessage;
   final VoidCallback onChanged;
 
   @override
   Widget build(BuildContext context) {
-    return Container(
-      padding: const EdgeInsets.all(18),
-      decoration: BoxDecoration(
-        color: const Color(0xFF171B22),
-        borderRadius: BorderRadius.circular(10),
-        border: Border.all(color: const Color(0xFF29313D)),
-      ),
-      child: LayoutBuilder(
-        builder: (context, constraints) {
+    final borderColor = locked
+        ? AppColors.border
+        : isActiveStep
+        ? AppColors.warning.withAlpha(200)
+        : enabled
+        ? AppColors.warning.withAlpha(120)
+        : AppColors.border;
+
+    return AnimatedOpacity(
+      duration: const Duration(milliseconds: 280),
+      opacity: locked ? 0.55 : 1,
+      child: Container(
+        padding: const EdgeInsets.all(20),
+        decoration: AppDecorations.card(borderColor: borderColor),
+        child: Stack(
+          children: [
+            LayoutBuilder(
+              builder: (context, constraints) {
           final fields = [
             Expanded(
               child: _PageField(
@@ -776,36 +1022,53 @@ class _PageRangePanel extends StatelessWidget {
           final heading = Row(
             children: [
               Container(
-                width: 34,
-                height: 34,
+                width: 36,
+                height: 36,
                 alignment: Alignment.center,
-                decoration: BoxDecoration(
-                  color: const Color(0xFFFFB454).withAlpha(24),
-                  borderRadius: BorderRadius.circular(8),
+                decoration: AppDecorations.iconBadge(
+                  locked ? AppColors.textMuted : AppColors.warning,
                 ),
-                child: const Icon(
+                child: Icon(
                   Icons.menu_book_outlined,
                   size: 19,
-                  color: Color(0xFFFFB454),
+                  color: locked ? AppColors.textMuted : AppColors.warning,
                 ),
               ),
               const SizedBox(width: 12),
-              const Expanded(
+              Expanded(
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    Text(
-                      'Chọn số trang',
-                      style: TextStyle(
-                        color: Color(0xFFF4F7FB),
-                        fontSize: 16,
-                        fontWeight: FontWeight.w800,
-                      ),
+                    Row(
+                      children: [
+                        _StepBadge(
+                          step: step,
+                          color: locked
+                              ? AppColors.textMuted
+                              : AppColors.warning,
+                        ),
+                        const SizedBox(width: 8),
+                        Text(
+                          'Chọn số trang',
+                          style: GoogleFonts.plusJakartaSans(
+                            color: locked
+                                ? AppColors.textMuted
+                                : AppColors.textPrimary,
+                            fontSize: 16,
+                            fontWeight: FontWeight.w800,
+                          ),
+                        ),
+                      ],
                     ),
-                    SizedBox(height: 3),
+                    const SizedBox(height: 4),
                     Text(
-                      'Để trống nếu muốn phân tích toàn bộ PDF.',
-                      style: TextStyle(color: Color(0xFF9AA6B5), fontSize: 12),
+                      locked
+                          ? lockMessage
+                          : 'Để trống nếu muốn phân tích toàn bộ PDF.',
+                      style: GoogleFonts.plusJakartaSans(
+                        color: AppColors.textSecondary,
+                        fontSize: 12.5,
+                      ),
                     ),
                   ],
                 ),
@@ -813,39 +1076,123 @@ class _PageRangePanel extends StatelessWidget {
             ],
           );
 
+          final fieldsBlock = IgnorePointer(
+            ignoring: locked,
+            child: Opacity(
+              opacity: locked ? 0.7 : 1,
+              child: constraints.maxWidth < 760
+                  ? Column(
+                      crossAxisAlignment: CrossAxisAlignment.stretch,
+                      children: [
+                        const SizedBox(height: 14),
+                        _PageField(
+                          controller: startController,
+                          label: 'Trang bắt đầu',
+                          hint: 'Ví dụ: 1',
+                          enabled: enabled,
+                          onChanged: onChanged,
+                        ),
+                        const SizedBox(height: 10),
+                        _PageField(
+                          controller: stopController,
+                          label: 'Trang kết thúc',
+                          hint: 'Ví dụ: 8',
+                          enabled: enabled,
+                          onChanged: onChanged,
+                        ),
+                      ],
+                    )
+                  : Row(children: fields),
+            ),
+          );
+
           if (constraints.maxWidth < 760) {
             return Column(
               crossAxisAlignment: CrossAxisAlignment.stretch,
-              children: [
-                heading,
-                const SizedBox(height: 14),
-                _PageField(
-                  controller: startController,
-                  label: 'Trang bắt đầu',
-                  hint: 'Ví dụ: 1',
-                  enabled: enabled,
-                  onChanged: onChanged,
-                ),
-                const SizedBox(height: 10),
-                _PageField(
-                  controller: stopController,
-                  label: 'Trang kết thúc',
-                  hint: 'Ví dụ: 8',
-                  enabled: enabled,
-                  onChanged: onChanged,
-                ),
-              ],
+              children: [heading, fieldsBlock],
             );
           }
 
-          return Row(
+          return Column(
             children: [
-              Expanded(flex: 3, child: heading),
-              const SizedBox(width: 18),
-              Expanded(flex: 4, child: Row(children: fields)),
+              Row(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Expanded(flex: 3, child: heading),
+                  const SizedBox(width: 18),
+                  Expanded(flex: 4, child: fieldsBlock),
+                ],
+              ),
             ],
           );
-        },
+              },
+            ),
+            if (locked)
+              Positioned(
+                right: 8,
+                top: 8,
+                child: _LockBadge(message: 'Đã khóa'),
+              ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _StepBadge extends StatelessWidget {
+  const _StepBadge({required this.step, required this.color});
+
+  final String step;
+  final Color color;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      width: 22,
+      height: 22,
+      alignment: Alignment.center,
+      decoration: AppDecorations.iconBadge(color),
+      child: Text(
+        step,
+        style: GoogleFonts.plusJakartaSans(
+          color: color,
+          fontSize: 11,
+          fontWeight: FontWeight.w800,
+        ),
+      ),
+    );
+  }
+}
+
+class _LockBadge extends StatelessWidget {
+  const _LockBadge({required this.message});
+
+  final String message;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+      decoration: BoxDecoration(
+        color: AppColors.surfaceInset,
+        borderRadius: BorderRadius.circular(AppRadii.pill),
+        border: Border.all(color: AppColors.borderStrong),
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          const Icon(Icons.lock_outline, size: 14, color: AppColors.textMuted),
+          const SizedBox(width: 6),
+          Text(
+            message,
+            style: GoogleFonts.plusJakartaSans(
+              color: AppColors.textMuted,
+              fontSize: 11,
+              fontWeight: FontWeight.w700,
+            ),
+          ),
+        ],
       ),
     );
   }
@@ -874,31 +1221,11 @@ class _PageField extends StatelessWidget {
       keyboardType: TextInputType.number,
       inputFormatters: [FilteringTextInputFormatter.digitsOnly],
       onChanged: (_) => onChanged(),
-      style: const TextStyle(color: Color(0xFFF4F7FB), fontSize: 14),
-      decoration: InputDecoration(
-        labelText: label,
-        hintText: hint,
-        hintStyle: const TextStyle(color: Color(0xFF596575)),
-        labelStyle: const TextStyle(color: Color(0xFF9AA6B5)),
-        filled: true,
-        fillColor: const Color(0xFF101319),
-        contentPadding: const EdgeInsets.symmetric(
-          horizontal: 12,
-          vertical: 12,
-        ),
-        enabledBorder: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(8),
-          borderSide: const BorderSide(color: Color(0xFF252B34)),
-        ),
-        focusedBorder: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(8),
-          borderSide: const BorderSide(color: Color(0xFF72B7FF), width: 1.3),
-        ),
-        disabledBorder: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(8),
-          borderSide: const BorderSide(color: Color(0xFF252B34)),
-        ),
+      style: GoogleFonts.plusJakartaSans(
+        color: AppColors.textPrimary,
+        fontSize: 14,
       ),
+      decoration: InputDecoration(labelText: label, hintText: hint),
     );
   }
 }
@@ -922,62 +1249,80 @@ class _ActionPanel extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final pct = (progress.clamp(0.0, 1.0) * 100).round();
+
     return Container(
-      padding: const EdgeInsets.all(18),
-      decoration: BoxDecoration(
-        color: const Color(0xFF171B22),
-        borderRadius: BorderRadius.circular(10),
-        border: Border.all(color: const Color(0xFF29313D)),
-      ),
+      padding: const EdgeInsets.all(20),
+      decoration: AppDecorations.card(),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
           Row(
             children: [
+              Container(
+                width: 36,
+                height: 36,
+                alignment: Alignment.center,
+                decoration: AppDecorations.iconBadge(AppColors.accent),
+                child: const Icon(
+                  Icons.auto_awesome_outlined,
+                  size: 19,
+                  color: AppColors.accent,
+                ),
+              ),
+              const SizedBox(width: 12),
               Expanded(
                 child: Text(
                   statusText,
-                  maxLines: 1,
+                  maxLines: 2,
                   overflow: TextOverflow.ellipsis,
-                  style: TextStyle(
+                  style: GoogleFonts.plusJakartaSans(
                     color: errorText == null
-                        ? const Color(0xFFC8D2DE)
-                        : const Color(0xFFFFB4A8),
+                        ? AppColors.textPrimary
+                        : AppColors.error,
                     fontWeight: FontWeight.w600,
+                    fontSize: 14,
                   ),
                 ),
               ),
               const SizedBox(width: 16),
-              FilledButton.icon(
+              GradientActionButton(
+                label: isBusy ? 'Đang xử lý' : 'Analyze',
+                icon: Icons.auto_awesome_outlined,
                 onPressed: canAnalyze ? onAnalyze : null,
-                icon: isBusy
-                    ? const SizedBox(
-                        width: 17,
-                        height: 17,
-                        child: CircularProgressIndicator(strokeWidth: 2),
-                      )
-                    : const Icon(Icons.auto_awesome_outlined, size: 18),
-                label: Text(isBusy ? 'Đang xử lý' : 'Analyze'),
-                style: FilledButton.styleFrom(
-                  backgroundColor: const Color(0xFF2FBF71),
-                  foregroundColor: const Color(0xFF07130D),
-                  minimumSize: const Size(132, 42),
-                  shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(8),
-                  ),
-                ),
+                busy: isBusy,
+                variant: GradientButtonVariant.accent,
               ),
             ],
           ),
-          const SizedBox(height: 12),
-          ClipRRect(
-            borderRadius: BorderRadius.circular(999),
-            child: LinearProgressIndicator(
-              value: progress.clamp(0.0, 1.0),
-              minHeight: 8,
-              backgroundColor: const Color(0xFF252B34),
-              valueColor: const AlwaysStoppedAnimation(Color(0xFF72B7FF)),
-            ),
+          const SizedBox(height: 14),
+          Row(
+            children: [
+              Expanded(
+                child: ClipRRect(
+                  borderRadius: BorderRadius.circular(AppRadii.pill),
+                  child: SizedBox(
+                    height: 10,
+                    child: LinearProgressIndicator(
+                      value: progress.clamp(0.0, 1.0),
+                      backgroundColor: AppColors.surfaceInset,
+                      valueColor: const AlwaysStoppedAnimation(
+                        AppColors.primary,
+                      ),
+                    ),
+                  ),
+                ),
+              ),
+              const SizedBox(width: 12),
+              Text(
+                '$pct%',
+                style: GoogleFonts.plusJakartaSans(
+                  color: AppColors.textSecondary,
+                  fontWeight: FontWeight.w700,
+                  fontSize: 13,
+                ),
+              ),
+            ],
           ),
         ],
       ),
@@ -1008,7 +1353,7 @@ class _PreviewPanel extends StatelessWidget {
     final authors = _stringList(data['authors'] ?? metadata['authors']);
     final keywords = _stringList(data['keywords'] ?? metadata['keywords']);
     final abstract = _previewText(data['abstract'] ?? metadata['abstract']);
-    final outputFolder = _previewText(data['output_folder'], 'Papers');
+    final outputFolder = _previewText(data['output_folder'], 'Thư mục Vault');
     final markdown = _previewText(
       data['markdown_preview'] ?? data['raw_markdown'],
     );
@@ -1034,47 +1379,41 @@ class _PreviewPanel extends StatelessWidget {
         .toList();
 
     return Container(
-      padding: const EdgeInsets.all(18),
-      decoration: BoxDecoration(
-        color: const Color(0xFF171B22),
-        borderRadius: BorderRadius.circular(10),
-        border: Border.all(color: const Color(0xFF29313D)),
-      ),
+      padding: const EdgeInsets.all(20),
+      decoration: AppDecorations.card(),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
           Row(
             children: [
-              const Icon(Icons.article_outlined, color: Color(0xFF72B7FF)),
+              Container(
+                width: 36,
+                height: 36,
+                alignment: Alignment.center,
+                decoration: AppDecorations.iconBadge(AppColors.primary),
+                child: const Icon(
+                  Icons.article_outlined,
+                  size: 19,
+                  color: AppColors.primary,
+                ),
+              ),
               const SizedBox(width: 10),
-              const Expanded(
+              Expanded(
                 child: Text(
                   'Preview',
-                  style: TextStyle(
-                    color: Color(0xFFF4F7FB),
+                  style: GoogleFonts.plusJakartaSans(
+                    color: AppColors.textPrimary,
                     fontSize: 17,
                     fontWeight: FontWeight.w800,
                   ),
                 ),
               ),
-              FilledButton.icon(
+              GradientActionButton(
+                label: isBusy ? 'Đang Export' : 'Export',
+                icon: Icons.save_alt_outlined,
                 onPressed: canExport ? onExport : null,
-                icon: isBusy
-                    ? const SizedBox(
-                        width: 16,
-                        height: 16,
-                        child: CircularProgressIndicator(strokeWidth: 2),
-                      )
-                    : const Icon(Icons.save_alt_outlined, size: 18),
-                label: Text(isBusy ? 'Đang Export' : 'Export'),
-                style: FilledButton.styleFrom(
-                  backgroundColor: const Color(0xFF1A73E8),
-                  foregroundColor: Colors.white,
-                  minimumSize: const Size(118, 40),
-                  shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(8),
-                  ),
-                ),
+                busy: isBusy,
+                minWidth: 118,
               ),
             ],
           ),
@@ -1146,26 +1485,36 @@ class _ResultPanel extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Container(
-      padding: const EdgeInsets.all(18),
-      decoration: BoxDecoration(
-        color: const Color(0xFF152018),
-        borderRadius: BorderRadius.circular(10),
-        border: Border.all(color: const Color(0xFF2FBF71).withAlpha(120)),
+      padding: const EdgeInsets.all(20),
+      decoration: AppDecorations.card(
+        borderColor: AppColors.accent.withAlpha(140),
+      ).copyWith(
+        color: const Color(0xFF121C18),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Row(
             children: [
-              const Icon(Icons.check_circle_outline, color: Color(0xFF2FBF71)),
+              Container(
+                width: 36,
+                height: 36,
+                alignment: Alignment.center,
+                decoration: AppDecorations.iconBadge(AppColors.accent),
+                child: const Icon(
+                  Icons.check_circle_outline,
+                  size: 20,
+                  color: AppColors.accent,
+                ),
+              ),
               const SizedBox(width: 10),
-              const Expanded(
+              Expanded(
                 child: Text(
                   'Export thành công',
                   maxLines: 1,
                   overflow: TextOverflow.ellipsis,
-                  style: TextStyle(
-                    color: Color(0xFFF4F7FB),
+                  style: GoogleFonts.plusJakartaSans(
+                    color: AppColors.textPrimary,
                     fontSize: 17,
                     fontWeight: FontWeight.w800,
                   ),
@@ -1174,13 +1523,12 @@ class _ResultPanel extends StatelessWidget {
               OutlinedButton.icon(
                 onPressed: onOpenFolder,
                 icon: const Icon(Icons.folder_open_outlined, size: 17),
-                label: const Text('Mở Folder'),
+                label: Text(
+                  'Mở Folder',
+                  style: GoogleFonts.plusJakartaSans(fontWeight: FontWeight.w600),
+                ),
                 style: OutlinedButton.styleFrom(
-                  foregroundColor: const Color(0xFFD6DEE8),
-                  side: const BorderSide(color: Color(0xFF5D8C6F)),
-                  shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(8),
-                  ),
+                  side: BorderSide(color: AppColors.accent.withAlpha(120)),
                 ),
               ),
             ],
@@ -1214,30 +1562,27 @@ class _DetailBlock extends StatelessWidget {
   Widget build(BuildContext context) {
     return Container(
       width: double.infinity,
-      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
-      decoration: BoxDecoration(
-        color: const Color(0xFF101319),
-        borderRadius: BorderRadius.circular(8),
-        border: Border.all(color: const Color(0xFF252B34)),
-      ),
+      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 11),
+      decoration: AppDecorations.insetField(),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Text(
             label,
-            style: const TextStyle(
-              color: Color(0xFF7D8896),
+            style: GoogleFonts.plusJakartaSans(
+              color: AppColors.textMuted,
               fontSize: 11,
               fontWeight: FontWeight.w700,
+              letterSpacing: 0.4,
             ),
           ),
-          const SizedBox(height: 5),
+          const SizedBox(height: 6),
           Text(
             value.isEmpty ? 'Chưa có dữ liệu' : value,
             maxLines: 2,
             overflow: TextOverflow.ellipsis,
-            style: const TextStyle(
-              color: Color(0xFFD6DEE8),
+            style: GoogleFonts.plusJakartaSans(
+              color: AppColors.textPrimary,
               fontWeight: FontWeight.w600,
             ),
           ),
@@ -1262,21 +1607,18 @@ class _TextPreviewBlock extends StatelessWidget {
   Widget build(BuildContext context) {
     return Container(
       width: double.infinity,
-      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
-      decoration: BoxDecoration(
-        color: const Color(0xFF101319),
-        borderRadius: BorderRadius.circular(8),
-        border: Border.all(color: const Color(0xFF252B34)),
-      ),
+      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 11),
+      decoration: AppDecorations.insetField(),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Text(
             label,
-            style: const TextStyle(
-              color: Color(0xFF7D8896),
+            style: GoogleFonts.plusJakartaSans(
+              color: AppColors.textMuted,
               fontSize: 11,
               fontWeight: FontWeight.w700,
+              letterSpacing: 0.4,
             ),
           ),
           const SizedBox(height: 6),
@@ -1284,7 +1626,10 @@ class _TextPreviewBlock extends StatelessWidget {
             value,
             maxLines: maxLines,
             overflow: TextOverflow.ellipsis,
-            style: const TextStyle(color: Color(0xFFC8D2DE), height: 1.35),
+            style: GoogleFonts.plusJakartaSans(
+              color: AppColors.textSecondary,
+              height: 1.4,
+            ),
           ),
         ],
       ),
@@ -1302,28 +1647,25 @@ class _ChipBlock extends StatelessWidget {
   Widget build(BuildContext context) {
     return Container(
       constraints: const BoxConstraints(minWidth: 230, maxWidth: 360),
-      padding: const EdgeInsets.all(12),
-      decoration: BoxDecoration(
-        color: const Color(0xFF101319),
-        borderRadius: BorderRadius.circular(8),
-        border: Border.all(color: const Color(0xFF252B34)),
-      ),
+      padding: const EdgeInsets.all(14),
+      decoration: AppDecorations.insetField(),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Text(
             label,
-            style: const TextStyle(
-              color: Color(0xFF7D8896),
+            style: GoogleFonts.plusJakartaSans(
+              color: AppColors.textMuted,
               fontSize: 11,
               fontWeight: FontWeight.w700,
+              letterSpacing: 0.4,
             ),
           ),
           const SizedBox(height: 8),
           if (values.isEmpty)
-            const Text(
+            Text(
               'Chưa có dữ liệu',
-              style: TextStyle(color: Color(0xFF626E7D)),
+              style: GoogleFonts.plusJakartaSans(color: AppColors.textMuted),
             )
           else
             Wrap(
@@ -1333,7 +1675,7 @@ class _ChipBlock extends StatelessWidget {
                 for (final value in values.take(6))
                   _StatusPill(
                     label: _compactText(value, 34),
-                    color: const Color(0xFF72B7FF),
+                    color: AppColors.primary,
                   ),
               ],
             ),
@@ -1353,21 +1695,18 @@ class _PathBlock extends StatelessWidget {
   Widget build(BuildContext context) {
     return Container(
       constraints: const BoxConstraints(minWidth: 250, maxWidth: 500),
-      padding: const EdgeInsets.all(12),
-      decoration: BoxDecoration(
-        color: const Color(0xFF101319),
-        borderRadius: BorderRadius.circular(8),
-        border: Border.all(color: const Color(0xFF252B34)),
-      ),
+      padding: const EdgeInsets.all(14),
+      decoration: AppDecorations.insetField(),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Text(
             label,
-            style: const TextStyle(
-              color: Color(0xFF7D8896),
+            style: GoogleFonts.plusJakartaSans(
+              color: AppColors.textMuted,
               fontSize: 11,
               fontWeight: FontWeight.w700,
+              letterSpacing: 0.4,
             ),
           ),
           const SizedBox(height: 8),
@@ -1375,8 +1714,8 @@ class _PathBlock extends StatelessWidget {
             value.isEmpty ? 'Papers' : value,
             maxLines: 1,
             overflow: TextOverflow.ellipsis,
-            style: const TextStyle(
-              color: Color(0xFFC8D2DE),
+            style: GoogleFonts.plusJakartaSans(
+              color: AppColors.textPrimary,
               fontWeight: FontWeight.w600,
             ),
           ),
@@ -1397,29 +1736,28 @@ class _PreviewList extends StatelessWidget {
     return Container(
       width: double.infinity,
       constraints: const BoxConstraints(minHeight: 118, maxHeight: 190),
-      padding: const EdgeInsets.all(12),
-      decoration: BoxDecoration(
-        color: const Color(0xFF101319),
-        borderRadius: BorderRadius.circular(8),
-        border: Border.all(color: const Color(0xFF252B34)),
-      ),
+      padding: const EdgeInsets.all(14),
+      decoration: AppDecorations.insetField(),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Text(
             title,
-            style: const TextStyle(
-              color: Color(0xFF7D8896),
+            style: GoogleFonts.plusJakartaSans(
+              color: AppColors.textMuted,
               fontSize: 11,
               fontWeight: FontWeight.w700,
+              letterSpacing: 0.4,
             ),
           ),
           const SizedBox(height: 8),
           Expanded(
             child: items.isEmpty
-                ? const Text(
+                ? Text(
                     'Chưa có dữ liệu',
-                    style: TextStyle(color: Color(0xFF626E7D)),
+                    style: GoogleFonts.plusJakartaSans(
+                      color: AppColors.textMuted,
+                    ),
                   )
                 : SingleChildScrollView(
                     child: Column(
@@ -1432,10 +1770,10 @@ class _PreviewList extends StatelessWidget {
                               _compactText(item, 170),
                               maxLines: 2,
                               overflow: TextOverflow.ellipsis,
-                              style: const TextStyle(
-                                color: Color(0xFFC8D2DE),
+                              style: GoogleFonts.plusJakartaSans(
+                                color: AppColors.textSecondary,
                                 fontSize: 12,
-                                height: 1.25,
+                                height: 1.3,
                               ),
                             ),
                           ),
@@ -1459,21 +1797,22 @@ class _MarkdownPreviewBox extends StatelessWidget {
     return Container(
       height: 412,
       width: double.infinity,
-      padding: const EdgeInsets.all(12),
+      padding: const EdgeInsets.all(14),
       decoration: BoxDecoration(
-        color: const Color(0xFF0B0D11),
-        borderRadius: BorderRadius.circular(8),
-        border: Border.all(color: const Color(0xFF252B34)),
+        color: AppColors.surfaceInset,
+        borderRadius: BorderRadius.circular(AppRadii.sm),
+        border: Border.all(color: AppColors.border),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          const Text(
+          Text(
             'Markdown preview',
-            style: TextStyle(
-              color: Color(0xFF7D8896),
+            style: GoogleFonts.plusJakartaSans(
+              color: AppColors.textMuted,
               fontSize: 11,
               fontWeight: FontWeight.w700,
+              letterSpacing: 0.4,
             ),
           ),
           const SizedBox(height: 8),
@@ -1481,11 +1820,10 @@ class _MarkdownPreviewBox extends StatelessWidget {
             child: SingleChildScrollView(
               child: SelectableText(
                 markdown.isEmpty ? 'Chưa có Markdown preview' : markdown,
-                style: const TextStyle(
-                  color: Color(0xFFD6DEE8),
-                  fontFamily: 'Consolas',
+                style: GoogleFonts.jetBrainsMono(
+                  color: AppColors.textSecondary,
                   fontSize: 12,
-                  height: 1.35,
+                  height: 1.4,
                 ),
               ),
             ),
@@ -1505,17 +1843,19 @@ class _StatusPill extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+      padding: const EdgeInsets.symmetric(horizontal: 11, vertical: 6),
       decoration: BoxDecoration(
-        color: color.withAlpha(24),
-        border: Border.all(color: color.withAlpha(110)),
-        borderRadius: BorderRadius.circular(999),
+        gradient: LinearGradient(
+          colors: [color.withAlpha(36), color.withAlpha(14)],
+        ),
+        border: Border.all(color: color.withAlpha(100)),
+        borderRadius: BorderRadius.circular(AppRadii.pill),
       ),
       child: Text(
         label,
         maxLines: 1,
         overflow: TextOverflow.ellipsis,
-        style: TextStyle(
+        style: GoogleFonts.plusJakartaSans(
           color: color,
           fontSize: 12,
           fontWeight: FontWeight.w700,
